@@ -6,21 +6,33 @@ import {Youtube,Sun,Moon,History,UserCircle,ChevronDown,Settings,LogOut,User,Clo
 import { toast, Toaster } from 'sonner';
 import authService from '@/services/authService';
 import ErrorBoundary from './ErrorBoundary';
-import ChannelPerformance from './ChannelPerformance';
-import TopicTrends from './TopicTrends';
-import VideoSeoAnalysis from './VideoSeoAnalysis';
-import CompetitorAnalysis from './CompetitorAnalysis';
-import ThumbnailTesting from './ThumbnailTesting';
-import KeywordResearch from './KeywordResearch';
-import SocialSharing from './SocialSharing';
-import PerformancePredictor from './PerformancePredictor';
-import VideoSearch from './VideoSearch';
-import VideoCategories from './VideoCategories';
-import ProfileSettings from './ProfileSettings';
-import SavedItems from './SavedItems';
-import NotificationCenter from './NotificationCenter';
-import Login from './Login';
-import Register from './Register';
+import { Suspense, lazy } from 'react';
+
+const ChannelPerformance = lazy(() => import('./ChannelPerformance'));
+const TopicTrends = lazy(() => import('./TopicTrends'));
+const VideoSeoAnalysis = lazy(() => import('./VideoSeoAnalysis'));
+const CompetitorAnalysis = lazy(() => import('./CompetitorAnalysis'));
+const ThumbnailTesting = lazy(() => import('./ThumbnailTesting'));
+const KeywordResearch = lazy(() => import('./KeywordResearch'));
+const SocialSharing = lazy(() => import('./SocialSharing'));
+const PerformancePredictor = lazy(() => import('./PerformancePredictor'));
+const VideoSearch = lazy(() => import('./VideoSearch'));
+const VideoCategories = lazy(() => import('./VideoCategories'));
+const ProfileSettings = lazy(() => import('./ProfileSettings'));
+const SavedItems = lazy(() => import('./SavedItems'));
+const NotificationCenter = lazy(() => import('./NotificationCenter'));
+const Login = lazy(() => import('./Login'));
+const Register = lazy(() => import('./Register'));
+
+const ModuleLoader: React.FC = () => (
+    <div className="flex flex-col items-center justify-center min-h-[350px] w-full p-8">
+        <div className="relative w-12 h-12 mb-4">
+            <div className="absolute inset-0 rounded-full border-4 border-indigo-500/20 animate-ping" />
+            <div className="w-12 h-12 rounded-full border-4 border-t-indigo-600 border-r-transparent border-b-indigo-600 border-l-transparent animate-spin" />
+        </div>
+        <p className="text-sm font-medium text-gray-500 dark:text-gray-400 animate-pulse">Loading analytics module...</p>
+    </div>
+);
 interface FeatureDetails {
     keyBenefits: string[];
     howItWorks: string;
@@ -839,7 +851,9 @@ const FeaturePage: React.FC<{
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
         >
-            {featureComponents[featureId] || <div className="text-center text-gray-900 dark:text-white">Feature not found</div>}
+            <Suspense fallback={<ModuleLoader />}>
+                {featureComponents[featureId] || <div className="text-center text-gray-900 dark:text-white">Feature not found</div>}
+            </Suspense>
         </motion.div>
     );
 };
@@ -852,6 +866,14 @@ const App: React.FC = () => {
     const [userAvatar, setUserAvatar] = useState<string>('');
     const [authLoading, setAuthLoading] = useState<boolean>(true);
     useEffect(() => {
+        // Pre-warm backend API to mitigate cold starts
+        const warmUpBackend = () => {
+            const apiBase = (import.meta.env.VITE_API_BASE_URL || 'https://ai-youtube-analytics.onrender.com').replace(/\/+$/, '');
+            fetch(`${apiBase}/api/health`, { method: 'GET' }).catch(() => {});
+        };
+        warmUpBackend();
+        const pingInterval = setInterval(warmUpBackend, 10 * 60 * 1000);
+
         // Verify authentication on mount
         const verifyAuth = async (): Promise<void> => {
             setAuthLoading(true);
@@ -1208,6 +1230,7 @@ const App: React.FC = () => {
                         </motion.div>
                     )}
                     {!isLoggedIn && view === 'login' && (
+                        <Suspense fallback={<ModuleLoader />}>
                         <Login 
                             onSuccess={() => {
                                 const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -1216,8 +1239,10 @@ const App: React.FC = () => {
                             onSwitchToRegister={() => setView('signup')}
                             onForgotPassword={() => setView('forgot-password')}
                         />
+                        </Suspense>
                     )}
                     {!isLoggedIn && view === 'signup' && (
+                        <Suspense fallback={<ModuleLoader />}>
                         <Register 
                             onSuccess={() => {
                                 const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -1225,12 +1250,15 @@ const App: React.FC = () => {
                             }}
                             onSwitchToLogin={() => setView('login')}
                         />
+                        </Suspense>
                     )}
                     {!isLoggedIn && view === 'forgot-password' && (
+                        <Suspense fallback={<ModuleLoader />}>
                         <ForgotPasswordPage 
                             onBack={() => setView('login')}
                             onSwitchToLogin={() => setView('login')}
                         />
+                        </Suspense>
                     )}
                     {isLoggedIn && view === 'dashboard' && (
                         <motion.div
@@ -1270,10 +1298,10 @@ const App: React.FC = () => {
                         <SettingsPage />
                     )}
                     {isLoggedIn && view === 'saved-items' && (
-                        <SavedItems userEmail={userEmail} />
+                        <Suspense fallback={<ModuleLoader />}><SavedItems userEmail={userEmail} /></Suspense>
                     )}
                     {isLoggedIn && view === 'notifications' && (
-                        <NotificationCenter userEmail={userEmail} />
+                        <Suspense fallback={<ModuleLoader />}><NotificationCenter userEmail={userEmail} /></Suspense>
                     )}
                     {isLoggedIn && dashboardFeatures.some((f: Feature) => f.id === view) && (
                         <FeaturePage featureId={view} userEmail={userEmail} />

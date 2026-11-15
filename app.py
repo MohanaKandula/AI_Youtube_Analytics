@@ -274,19 +274,40 @@ thumbnail_stats = {}
 video_thumbnails = {}
 
 # ===== DATABASE CONNECTION =====
-def get_db_connection():
-    """Get a fresh, dedicated database connection per request (immune to stale SSL socket errors)"""
-    try:
-        if DATABASE_URL:
-            conn = psycopg2.connect(DATABASE_URL)
-        else:
-            conn = psycopg2.connect(
-                host=DB_HOST, port=DB_PORT, database=DB_NAME, user=DB_USER, password=DB_PASSWORD
-            )
-        return conn
-    except Exception as e:
-        app.logger.error(f'Database connection error: {e}')
-        return None
+def get_db_connection(max_retries=2):
+    """Get a fresh, dedicated database connection per request with TCP keepalives and retry resilience"""
+    for attempt in range(max_retries):
+        try:
+            if DATABASE_URL:
+                conn = psycopg2.connect(
+                    DATABASE_URL,
+                    connect_timeout=10,
+                    keepalives=1,
+                    keepalives_idle=30,
+                    keepalives_interval=10,
+                    keepalives_count=3
+                )
+            else:
+                conn = psycopg2.connect(
+                    host=DB_HOST,
+                    port=DB_PORT,
+                    database=DB_NAME,
+                    user=DB_USER,
+                    password=DB_PASSWORD,
+                    connect_timeout=10,
+                    keepalives=1,
+                    keepalives_idle=30,
+                    keepalives_interval=10,
+                    keepalives_count=3
+                )
+            return conn
+        except Exception as e:
+            if attempt < max_retries - 1:
+                time.sleep(0.5)
+            else:
+                app.logger.error(f'Database connection failed after {max_retries} attempts: {e}')
+                return None
+    return None
 
 def release_db_connection(conn):
     """Safely close connection"""
@@ -297,8 +318,23 @@ def release_db_connection(conn):
             pass
 
 # ===== CACHING FUNCTIONS =====
+MAX_IN_MEMORY_CACHE_SIZE = 1000
+
+def _prune_expired_cache():
+    """Remove expired items and enforce max size limit"""
+    now = time.time()
+    expired_keys = [k for k, v in list(video_cache.items()) if len(v) >= 3 and (now - v[1]) > v[2]]
+    for k in expired_keys:
+        video_cache.pop(k, None)
+    
+    # If still over limit, evict oldest 20%
+    if len(video_cache) > MAX_IN_MEMORY_CACHE_SIZE:
+        sorted_keys = sorted(video_cache.keys(), key=lambda k: video_cache[k][1] if len(video_cache[k]) > 1 else 0)
+        for k in sorted_keys[:int(MAX_IN_MEMORY_CACHE_SIZE * 0.2)]:
+            video_cache.pop(k, None)
+
 def cache_get(key):
-    """Get value from cache (Redis or in-memory)"""
+    """Get value from cache (Redis or in-memory) with individual TTL awareness"""
     if redis_client:
         try:
             value = redis_client.get(key)
@@ -309,13 +345,23 @@ def cache_get(key):
     
     # Fallback to in-memory cache
     if key in video_cache:
-        data, timestamp = video_cache[key]
-        if time.time() - timestamp < CACHE_TTL:
-            return data
+        entry = video_cache[key]
+        if len(entry) == 3:
+            data, timestamp, ttl = entry
+            if time.time() - timestamp < ttl:
+                return data
+            else:
+                video_cache.pop(key, None)
+        elif len(entry) == 2:
+            data, timestamp = entry
+            if time.time() - timestamp < CACHE_TTL:
+                return data
+            else:
+                video_cache.pop(key, None)
     return None
 
 def cache_set(key, value, ttl=CACHE_TTL):
-    """Set value in cache (Redis or in-memory)"""
+    """Set value in cache (Redis or in-memory) with custom TTL"""
     if redis_client:
         try:
             redis_client.setex(key, ttl, json.dumps(value))
@@ -324,7 +370,9 @@ def cache_set(key, value, ttl=CACHE_TTL):
             app.logger.warning(f'Redis set error: {e}')
     
     # Fallback to in-memory cache
-    video_cache[key] = (value, time.time())
+    if len(video_cache) >= MAX_IN_MEMORY_CACHE_SIZE:
+        _prune_expired_cache()
+    video_cache[key] = (value, time.time(), ttl)
 
 # ===== JWT TOKEN FUNCTIONS =====
 def generate_token(email, remember_me=False):
@@ -1939,6 +1987,12 @@ class ChannelPerformance(Resource):
         if not channel_id:
             return {"error": "Missing channel_id"}, 400
 
+        # Check cache (2 hours TTL for channel performance)
+        cache_key = f"yt:channel_perf:{channel_id}"
+        cached = cache_get(cache_key)
+        if cached:
+            return cached, 200
+
         if not youtube:
             return {"error": "YouTube API not configured"}, 500
 
@@ -2017,10 +2071,12 @@ class ChannelPerformance(Resource):
                 "subsToViewsRatio": subs_to_views_ratio
             }
 
-            return {
+            result_data = {
                 "channel_info": channel_info,
                 "video_stats": video_stats
-            }, 200
+            }
+            cache_set(cache_key, result_data, ttl=7200)
+            return result_data, 200
 
         except HttpError as e:
             app.logger.error(f"YouTube API Error: {e}")
@@ -2098,10 +2154,15 @@ class TopicTrends(Resource):
 
 
 def fetch_recent_videos(channel_id: str, max_results: int = 10) -> list:
-    """Fetch recent videos from a channel"""
+    """Fetch recent videos from a channel (cached 1 hour)"""
     if not youtube:
         return []
     
+    cache_key = f"yt:recent_vids:{channel_id}:{max_results}"
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     try:
         search_response = youtube.search().list(
             part='snippet',
@@ -2116,6 +2177,7 @@ def fetch_recent_videos(channel_id: str, max_results: int = 10) -> list:
             if item['id'].get('videoId'):
                 video_ids.append(item['id']['videoId'])
         
+        cache_set(cache_key, video_ids, ttl=3600)
         return video_ids
         
     except Exception as e:
@@ -2515,6 +2577,12 @@ class VideoSEOAnalysis(Resource):
         if not keyword:
             return {"error": "Missing 'keyword' parameter"}, 400
 
+        # Check cache (2 hours TTL for keyword SEO analysis)
+        cache_key = f"yt:video_seo:{keyword.lower()}"
+        cached = cache_get(cache_key)
+        if cached:
+            return cached, 200
+
         if not youtube:
             return {"error": "YouTube API not configured"}, 500
 
@@ -2611,8 +2679,8 @@ class VideoSEOAnalysis(Resource):
             # Compute SEO Score
             seo_score, title_score, desc_score, tag_score, view_score, keyword_score = compute_score(recommendations, keyword)
 
-            # Return full response
-            return {
+            # Return full response (cached 2 hours)
+            resp_data = {
                 "recommendations": recommendations,
                 "seo_score": seo_score,
                 "score_breakdown": {
@@ -2622,7 +2690,9 @@ class VideoSEOAnalysis(Resource):
                     "views": round(view_score, 2),
                     "keyword_presence": keyword_score
                 }
-            }, 200
+            }
+            cache_set(cache_key, resp_data, ttl=7200)
+            return resp_data, 200
 
         except HttpError as e:
             app.logger.error(f"YouTube API error in seo_analysis: {e}")
@@ -2823,10 +2893,15 @@ def calculate_scores(title, description, views, likes, comments_count, sentiment
     return custom_score, relevance_score, final_score
 
 def fetch_recent_videos(channel_id: str, max_results: int = 10) -> list:
-    """Fetch recent videos from a channel"""
+    """Fetch recent videos from a channel (cached 1 hour)"""
     if not youtube:
         return []
     
+    cache_key = f"yt:recent_vids:{channel_id}:{max_results}"
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     try:
         search_response = youtube.search().list(
             part='snippet',
@@ -2841,6 +2916,7 @@ def fetch_recent_videos(channel_id: str, max_results: int = 10) -> list:
             if item['id'].get('videoId'):
                 video_ids.append(item['id']['videoId'])
         
+        cache_set(cache_key, video_ids, ttl=3600)
         return video_ids
         
     except Exception as e:
@@ -2910,9 +2986,15 @@ def compute_video_stats(video_ids: list) -> tuple:
         return [], {}
 
 def get_channel_stats(channel_id: str):
-    """Get channel statistics"""
+    """Get channel statistics (cached 2 hours)"""
     if not youtube:
         return None
+    
+    cache_key = f"yt:chan_stats:{channel_id}"
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     try:
         resp = youtube.channels().list(
             part="statistics,snippet", 
