@@ -3,7 +3,7 @@ services:
     name: tutortrace-backend
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --workers 4 --bind 0.0.0.0:$PORT --timeout 60 app:app
+    startCommand: gunicorn --workers 2 --threads 2 --bind 0.0.0.0:$PORT --timeout 120 app:app
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -14,7 +14,7 @@ services:
       - key: FLASK_DEBUG
         value: "false"
       - key: CORS_ALLOWED_ORIGINS
-        value: "http://localhost:5173,https://*.vercel.app"
+        value: "https://ai-youtube-analytics-iota.vercel.app,http://localhost:5173"
       - key: YOUTUBE_API_KEY
         sync: false
       - key: MAIL_USERNAME

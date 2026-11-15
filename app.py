@@ -11,7 +11,17 @@ from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from threading import Timer
-from textblob import TextBlob
+try:
+    from textblob import TextBlob
+except ImportError:
+    class TextBlob:
+        def __init__(self, text):
+            self.text = str(text or "")
+            self.words = self.text.split()
+            class _Sentiment:
+                polarity = 0.0
+                subjectivity = 0.0
+            self.sentiment = _Sentiment()
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from psycopg2.extras import RealDictCursor
@@ -1018,6 +1028,7 @@ def init_db():
         app.logger.warning("Could not initialize DB (connection failed).")
         return
     
+    cur = None
     try:
         cur = conn.cursor()
         
@@ -1215,7 +1226,11 @@ def init_db():
     except Exception as e:
         app.logger.error(f"Error initializing database: {e}")
     finally:
-        cur.close()
+        if cur:
+            try:
+                cur.close()
+            except Exception:
+                pass
         release_db_connection(conn)
 
 # Initialize database tables on startup if database is accessible
@@ -3234,21 +3249,18 @@ class PredictPerformance(Resource):
             app.logger.error(f"Error in predict_performance: {e}")
             return {"error": str(e)}, 400
 
-from openai import OpenAI
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
-
-import numpy as np
-from flask import request, jsonify
-from flask_restx import Resource
-from openai import OpenAI
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv('OPENROUTER_API_KEY', ''),
-)
+try:
+    from openai import OpenAI
+    openrouter_key = os.getenv('OPENROUTER_API_KEY', '')
+    if openrouter_key:
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=openrouter_key,
+        )
+    else:
+        client = None
+except Exception:
+    client = None
 
 @api.route('/chatbot/ask')
 class ChatbotAsk(Resource):
