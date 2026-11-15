@@ -230,23 +230,29 @@ DB_NAME = os.getenv("DB_NAME", "youtube_analytics")
 DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
-# Create connection pool
-try:
-    if DATABASE_URL:
-        db_pool = psycopg2.pool.SimpleConnectionPool(1, 20, dsn=DATABASE_URL)
-    else:
-        db_pool = psycopg2.pool.SimpleConnectionPool(
-            1, 20,
-            host=DB_HOST,
-            port=DB_PORT,
-            database=DB_NAME,
-            user=DB_USER,
-            password=DB_PASSWORD
-        )
-    app.logger.info('Database connection pool created')
-except Exception as e:
-    app.logger.error(f'Database connection pool creation failed: {e}')
-    db_pool = None
+# Create connection pool lazily per worker process to ensure thread-safety
+db_pool = None
+
+def get_db_pool():
+    global db_pool
+    if db_pool is None:
+        try:
+            if DATABASE_URL:
+                db_pool = psycopg2.pool.ThreadedConnectionPool(1, 10, dsn=DATABASE_URL)
+            else:
+                db_pool = psycopg2.pool.ThreadedConnectionPool(
+                    1, 10,
+                    host=DB_HOST,
+                    port=DB_PORT,
+                    database=DB_NAME,
+                    user=DB_USER,
+                    password=DB_PASSWORD
+                )
+            app.logger.info('Database ThreadedConnectionPool created')
+        except Exception as e:
+            app.logger.error(f'Database connection pool creation failed: {e}')
+            db_pool = None
+    return db_pool
 
 # File paths and constants
 DATA_FILE = "training_data.csv"
@@ -269,35 +275,47 @@ video_thumbnails = {}
 
 # ===== DATABASE CONNECTION =====
 def get_db_connection():
-    """Get a connection from the pool"""
-    if db_pool:
+    """Get a thread-safe connection from the pool"""
+    pool = get_db_pool()
+    if pool:
         try:
-            conn = db_pool.getconn()
-            return conn
+            conn = pool.getconn()
+            if conn and not conn.closed:
+                return conn
+            if conn and conn.closed:
+                pool.putconn(conn, close=True)
+                return pool.getconn()
         except Exception as e:
-            app.logger.error(f'Error getting database connection: {e}')
-            return None
-    else:
-        # Fallback to direct connection
-        try:
-            if DATABASE_URL:
-                conn = psycopg2.connect(DATABASE_URL)
-            else:
-                conn = psycopg2.connect(
-                    host=DB_HOST, port=DB_PORT, database=DB_NAME, user=DB_USER, password=DB_PASSWORD
-                )
-            return conn
-        except Exception as e:
-            app.logger.error(f'Database connection error: {e}')
-            return None
+            app.logger.warning(f'Pool connection checkout issue: {e}')
+    
+    # Fallback to direct connection
+    try:
+        if DATABASE_URL:
+            conn = psycopg2.connect(DATABASE_URL)
+        else:
+            conn = psycopg2.connect(
+                host=DB_HOST, port=DB_PORT, database=DB_NAME, user=DB_USER, password=DB_PASSWORD
+            )
+        return conn
+    except Exception as e:
+        app.logger.error(f'Database direct connection error: {e}')
+        return None
 
 def release_db_connection(conn):
-    """Release a connection back to the pool"""
-    if db_pool and conn:
+    """Release a connection back to the pool or close it safely"""
+    if not conn:
+        return
+    pool = get_db_pool()
+    if pool:
         try:
-            db_pool.putconn(conn)
+            pool.putconn(conn)
+            return
         except Exception as e:
-            app.logger.error(f'Error releasing database connection: {e}')
+            app.logger.warning(f'Error releasing connection to pool: {e}')
+    try:
+        conn.close()
+    except Exception:
+        pass
 
 # ===== CACHING FUNCTIONS =====
 def cache_get(key):
@@ -3733,7 +3751,7 @@ class HealthCheck(Resource):
             "time": datetime.now(timezone.utc).isoformat(),
             "version": "1.0.0",
             "services": {
-                "database": "ok" if db_pool else "warning",
+                "database": "ok" if (get_db_pool() is not None or DATABASE_URL) else "warning",
                 "redis": "ok" if redis_client else "warning",
                 "youtube": "ok" if youtube else "warning"
             }
