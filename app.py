@@ -275,20 +275,7 @@ video_thumbnails = {}
 
 # ===== DATABASE CONNECTION =====
 def get_db_connection():
-    """Get a thread-safe connection from the pool"""
-    pool = get_db_pool()
-    if pool:
-        try:
-            conn = pool.getconn()
-            if conn and not conn.closed:
-                return conn
-            if conn and conn.closed:
-                pool.putconn(conn, close=True)
-                return pool.getconn()
-        except Exception as e:
-            app.logger.warning(f'Pool connection checkout issue: {e}')
-    
-    # Fallback to direct connection
+    """Get a fresh, dedicated database connection per request (immune to stale SSL socket errors)"""
     try:
         if DATABASE_URL:
             conn = psycopg2.connect(DATABASE_URL)
@@ -298,24 +285,16 @@ def get_db_connection():
             )
         return conn
     except Exception as e:
-        app.logger.error(f'Database direct connection error: {e}')
+        app.logger.error(f'Database connection error: {e}')
         return None
 
 def release_db_connection(conn):
-    """Release a connection back to the pool or close it safely"""
-    if not conn:
-        return
-    pool = get_db_pool()
-    if pool:
+    """Safely close connection"""
+    if conn:
         try:
-            pool.putconn(conn)
-            return
-        except Exception as e:
-            app.logger.warning(f'Error releasing connection to pool: {e}')
-    try:
-        conn.close()
-    except Exception:
-        pass
+            conn.close()
+        except Exception:
+            pass
 
 # ===== CACHING FUNCTIONS =====
 def cache_get(key):
@@ -3751,7 +3730,7 @@ class HealthCheck(Resource):
             "time": datetime.now(timezone.utc).isoformat(),
             "version": "1.0.0",
             "services": {
-                "database": "ok" if (get_db_pool() is not None or DATABASE_URL) else "warning",
+                "database": "ok" if DATABASE_URL else "warning",
                 "redis": "ok" if redis_client else "warning",
                 "youtube": "ok" if youtube else "warning"
             }
