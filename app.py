@@ -40,11 +40,33 @@ load_dotenv()
 # Initialize Flask App
 app = Flask(__name__)
 
-# CORS Configuration - Fixed to prevent duplicate headers
+# CORS Configuration - Dynamic Cloud + Local support
+DEFAULT_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173"
+]
+
+def is_origin_allowed(origin):
+    if not origin:
+        return False
+    if origin in DEFAULT_ALLOWED_ORIGINS:
+        return True
+    custom_origins = os.getenv("CORS_ALLOWED_ORIGINS", "")
+    if custom_origins:
+        allowed_list = [o.strip().rstrip("/") for o in custom_origins.split(",") if o.strip()]
+        if origin in allowed_list or "*" in allowed_list:
+            return True
+    # Allow any vercel.app or render.com domain by default for seamless deployment
+    if origin.endswith(".vercel.app") or origin.endswith(".render.com") or origin.endswith(".onrender.com"):
+        return True
+    return False
+
 CORS(app, 
      resources={
          r"/*": {
-             "origins": ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000", "http://127.0.0.1:5173"],
+             "origins": "*",
              "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
              "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
              "supports_credentials": True,
@@ -58,24 +80,29 @@ CORS(app,
 # Add this after CORS configuration
 @app.after_request
 def after_request(response):
+    origin = request.headers.get('Origin')
+    allowed_origin = origin if is_origin_allowed(origin) else '*'
+    
     # Handle preflight requests
     if request.method == 'OPTIONS':
         response = make_response()
-        response.headers.add('Access-Control-Allow-Origin', 'http://localhost:5173')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        response.headers.add('Access-Control-Max-Age', '86400')
+        response.headers['Access-Control-Allow-Origin'] = allowed_origin
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With,Accept,Origin'
+        response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
+        if allowed_origin != '*':
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Max-Age'] = '86400'
         return response
     
     # Add CORS headers to all responses
-    origin = request.headers.get('Origin')
-    if origin in ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173']:
-        response.headers.add('Access-Control-Allow-Origin', origin)
+    if allowed_origin != '*':
+        response.headers['Access-Control-Allow-Origin'] = allowed_origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+    else:
+        response.headers['Access-Control-Allow-Origin'] = '*'
     
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With,Accept,Origin'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
     
     return response
 
@@ -83,29 +110,37 @@ def after_request(response):
 @app.route('/<path:path>', methods=['OPTIONS'])
 def handle_options(path):
     response = make_response()
-    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:5173')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
-    response.headers.add('Access-Control-Max-Age', '86400')
+    origin = request.headers.get('Origin')
+    allowed_origin = origin if is_origin_allowed(origin) else '*'
+    response.headers['Access-Control-Allow-Origin'] = allowed_origin
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With,Accept,Origin'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
+    if allowed_origin != '*':
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+    response.headers['Access-Control-Max-Age'] = '86400'
     return response
 
 @app.route('/test-cors', methods=['GET', 'POST', 'OPTIONS'])
 def test_cors():
+    origin = request.headers.get('Origin')
+    allowed_origin = origin if is_origin_allowed(origin) else '*'
     if request.method == 'OPTIONS':
         response = make_response()
-        response.headers.add('Access-Control-Allow-Origin', 'http://localhost:5173')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers['Access-Control-Allow-Origin'] = allowed_origin
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With,Accept,Origin'
+        response.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
+        if allowed_origin != '*':
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
         return response
     
-    return jsonify({
+    resp = jsonify({
         'message': 'CORS test successful',
-        'origin': request.headers.get('Origin'),
+        'origin': origin,
         'method': request.method,
         'timestamp': datetime.now(timezone.utc).isoformat()
     })
+    resp.headers['Access-Control-Allow-Origin'] = allowed_origin
+    return resp
 
 # Set up logging
 if not app.debug:
@@ -119,13 +154,17 @@ if not app.debug:
     app.logger.info('YouTube Analytics startup')
 
 # Initialize Redis for caching
+REDIS_URL = os.getenv('REDIS_URL')
 try:
-    redis_client = redis.Redis(
-        host=os.getenv('REDIS_HOST', 'localhost'),
-        port=int(os.getenv('REDIS_PORT', 6379)),
-        db=0,
-        decode_responses=True
-    )
+    if REDIS_URL:
+        redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+    else:
+        redis_client = redis.Redis(
+            host=os.getenv('REDIS_HOST', 'localhost'),
+            port=int(os.getenv('REDIS_PORT', 6379)),
+            db=0,
+            decode_responses=True
+        )
     redis_client.ping()
     app.logger.info('Redis connection established')
 except Exception as e:
@@ -152,40 +191,47 @@ api = Api(
 
 # ===== CONFIGURATION =====
 # JWT Configuration
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', '0484fc9264f5d1da17152831465bf369da3146195740b8bc8aa78e2f58ace2d0')
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
 app.config['JWT_EXPIRATION_HOURS'] = 24
 app.config['JWT_REFRESH_DAYS'] = 30
 
 # Mail Configuration
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = os.getenv("MAIL_USERNAME", "kandulamohana14@gmail.com")
-app.config['MAIL_PASSWORD'] = os.getenv("MAIL_PASSWORD", "bzkf rvbh awnd zhxl")
+app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
+app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT', 587))
+app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'True').lower() == 'true'
+app.config['MAIL_USERNAME'] = os.getenv("MAIL_USERNAME", "")
+app.config['MAIL_PASSWORD'] = os.getenv("MAIL_PASSWORD", "")
 app.config['MAIL_DEFAULT_SENDER'] = app.config['MAIL_USERNAME']
 mail = Mail(app)
 
-# YouTube API Configuration
+# YouTube API Configuration (Secure zero-trust loading)
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
 youtube = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY) if YOUTUBE_API_KEY else None
 
 # Database Configuration with connection pooling
+DATABASE_URL = os.getenv("DATABASE_URL")
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5432")
 DB_NAME = os.getenv("DB_NAME", "youtube_analytics")
 DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "mohana")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
 # Create connection pool
 try:
-    db_pool = psycopg2.pool.SimpleConnectionPool(
-        1, 20,
-        host=DB_HOST,
-        port=DB_PORT,
-        database=DB_NAME,
-        user=DB_USER,
-        password=DB_PASSWORD
-    )
+    if DATABASE_URL:
+        db_pool = psycopg2.pool.SimpleConnectionPool(1, 20, dsn=DATABASE_URL)
+    else:
+        db_pool = psycopg2.pool.SimpleConnectionPool(
+            1, 20,
+            host=DB_HOST,
+            port=DB_PORT,
+            database=DB_NAME,
+            user=DB_USER,
+            password=DB_PASSWORD
+        )
     app.logger.info('Database connection pool created')
 except Exception as e:
     app.logger.error(f'Database connection pool creation failed: {e}')
@@ -223,9 +269,12 @@ def get_db_connection():
     else:
         # Fallback to direct connection
         try:
-            conn = psycopg2.connect(
-                host=DB_HOST, port=DB_PORT, database=DB_NAME, user=DB_USER, password=DB_PASSWORD
-            )
+            if DATABASE_URL:
+                conn = psycopg2.connect(DATABASE_URL)
+            else:
+                conn = psycopg2.connect(
+                    host=DB_HOST, port=DB_PORT, database=DB_NAME, user=DB_USER, password=DB_PASSWORD
+                )
             return conn
         except Exception as e:
             app.logger.error(f'Database connection error: {e}')
@@ -307,14 +356,14 @@ def token_required(f):
             try:
                 token = auth_header.split(' ')[1]
             except IndexError:
-                return jsonify({'message': 'Invalid token format'}), 401
+                return {'message': 'Invalid token format'}, 401
         
         if not token:
-            return jsonify({'message': 'Token is missing'}), 401
+            return {'message': 'Token is missing'}, 401
         
         email = verify_token(token)
         if not email:
-            return jsonify({'message': 'Token is invalid or expired'}), 401
+            return {'message': 'Token is invalid or expired'}, 401
         
         return f(email=email, *args, **kwargs)
     
@@ -496,12 +545,9 @@ class SendOTP(Resource):
             # Send OTP via email
             email_sent = send_otp_email(email, otp)
             
-            # Always return OTP in development mode for testing
-            # REMOVE THIS IN PRODUCTION
             return {
                 "message": "OTP sent successfully to your email",
-                "email": email,
-                "dev_otp": otp  # REMOVE THIS IN PRODUCTION
+                "email": email
             }, 200
                 
         except Exception as e:
@@ -638,12 +684,9 @@ class ResendOTP(Resource):
             # Send OTP via email
             email_sent = send_otp_email(email, otp)
             
-            # Always return OTP in development mode for testing
-            # REMOVE THIS IN PRODUCTION
             return {
                 "message": "OTP resent successfully",
-                "email": email,
-                "dev_otp": otp  # REMOVE THIS IN PRODUCTION
+                "email": email
             }, 200
                 
         except Exception as e:
@@ -725,6 +768,9 @@ class Login(Resource):
         
         if not email or not password:
             return {"message": "Email and password are required"}, 400
+        
+        if not validate_email(email):
+            return {"message": "Invalid email format"}, 400
         
         conn = get_db_connection()
         if not conn:
@@ -1018,6 +1064,7 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_reset_token ON password_reset_tokens(token, user_email)")
         
         # Search history table
         cur.execute("""
@@ -1119,6 +1166,7 @@ def init_db():
             )
         """)
         cur.execute("CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_email, is_read)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_notif_composite ON notifications(user_email, is_read, created_at DESC)")
         
         # Export history
         cur.execute("""
@@ -1169,6 +1217,12 @@ def init_db():
     finally:
         cur.close()
         release_db_connection(conn)
+
+# Initialize database tables on startup if database is accessible
+try:
+    init_db()
+except Exception as _e:
+    app.logger.warning(f"Initial DB check warning: {_e}")
 
 # ===== ERROR HANDLING =====
 @app.errorhandler(404)
@@ -1692,7 +1746,25 @@ class SearchVideos(Resource):
             query_terms = query.lower().split()
             videos = []
             
-            for item in search_resp.get('items', []):
+            items = search_resp.get('items', [])
+            video_ids = [item['id']['videoId'] for item in items if item.get('id', {}).get('videoId')]
+            
+            # Batch fetch all video statistics in a single outbound request (eliminates N individual calls)
+            stats_cache = {}
+            if video_ids and youtube:
+                try:
+                    stats_response = youtube.videos().list(part="statistics", id=','.join(video_ids[:50])).execute()
+                    for v_item in stats_response.get("items", []):
+                        st = v_item.get("statistics", {})
+                        stats_cache[v_item["id"]] = (
+                            int(st.get("viewCount", 0)),
+                            int(st.get("likeCount", 0)),
+                            int(st.get("commentCount", 0))
+                        )
+                except Exception as e:
+                    app.logger.warning(f"Batched stats retrieval fallback: {e}")
+
+            for item in items:
                 vid = item['id'].get('videoId')
                 if not vid:
                     continue
@@ -1700,7 +1772,7 @@ class SearchVideos(Resource):
                 snip = item['snippet']
                 title = snip.get("title", "")
                 desc = snip.get("description", "")
-                views, likes, comments_count = get_video_stats(vid)
+                views, likes, comments_count = stats_cache.get(vid) if vid in stats_cache else get_video_stats(vid)
                 avg_sentiment = analyze_sentiment(vid)
                 sentiment = sentiment_label(avg_sentiment)
                 cscore, rscore, fscore = calculate_scores(title, desc, views, likes, comments_count, avg_sentiment, query_terms)
@@ -3175,7 +3247,7 @@ from flask_restx import Resource
 from openai import OpenAI
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
-    api_key='',
+    api_key=os.getenv('OPENROUTER_API_KEY', ''),
 )
 
 @api.route('/chatbot/ask')
@@ -3345,9 +3417,9 @@ class KeywordResearchAI(Resource):
 # ===== YOUTUBE OAUTH & THUMBNAIL TESTING ENDPOINTS =====
 
 # YouTube OAuth Configuration
-# YOUTUBE_CLIENT_ID = os.getenv("YOUTUBE_CLIENT_ID", "")
-# YOUTUBE_CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET", "")
-# YOUTUBE_REDIRECT_URI = os.getenv("YOUTUBE_REDIRECT_URI", "")
+YOUTUBE_CLIENT_ID = os.getenv("YOUTUBE_CLIENT_ID", "")
+YOUTUBE_CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET", "")
+YOUTUBE_REDIRECT_URI = os.getenv("YOUTUBE_REDIRECT_URI", "http://localhost:3000/youtube-oauth-callback.html")
 YOUTUBE_SCOPES = [
     "https://www.googleapis.com/auth/youtube.readonly",
     "https://www.googleapis.com/auth/yt-analytics.readonly"
@@ -3647,10 +3719,13 @@ if __name__ == '__main__':
     # Initialize database tables
     init_db()
     
+    port = int(os.getenv("PORT", 5000))
+    debug_mode = os.getenv("FLASK_DEBUG", "False").lower() in ("true", "1", "yes")
+    
     # Run the Flask app
     app.run(
-        debug=True, 
+        debug=debug_mode, 
         host='0.0.0.0', 
-        port=5000,
+        port=port,
         threaded=True
     )

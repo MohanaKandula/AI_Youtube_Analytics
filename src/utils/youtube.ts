@@ -1,5 +1,5 @@
 // YouTube Data Fetching Utilities
-const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY || 'AIzaSyCKKqX15NznaABZydmTgNvfT9pHIQcWZmg';
+const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY || '';
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 
 export interface YouTubeVideo {

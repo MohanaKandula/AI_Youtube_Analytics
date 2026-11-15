@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { RadialBarChart, RadialBar, Legend, ResponsiveContainer } from 'recharts';
 
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(/\/+$/, '') + '/api';
+
 const VideoSeoAnalysis = () => {
     const [videoUrl, setVideoUrl] = useState('');
     const [keyword, setKeyword] = useState('');
@@ -27,7 +29,7 @@ const VideoSeoAnalysis = () => {
             if (videoUrl) params.append('video_url', videoUrl);
             if (keyword) params.append('keyword', keyword);
 
-            const response = await fetch(`http://localhost:5000/api/video_seo_analysis?${params}`);
+            const response = await fetch(`${API_BASE}/video_seo_analysis?${params}`);
             const data = await response.json();
 
             if (response.ok) {

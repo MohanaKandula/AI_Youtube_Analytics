@@ -1,0 +1,84 @@
+{
+  "workloads": {
+    "10_videos": {
+      "num_videos": 10,
+      "unbatched_requests": 21,
+      "batched_requests": 12,
+      "requests_saved": 9,
+      "request_reduction_pct": 42.86,
+      "unbatched_mean_sec": 1.646,
+      "unbatched_p50_sec": 1.629,
+      "batched_mean_sec": 0.949,
+      "batched_p50_sec": 0.947,
+      "latency_reduction_pct": 42.32,
+      "speedup_factor": 1.73
+    },
+    "25_videos": {
+      "num_videos": 25,
+      "unbatched_requests": 51,
+      "batched_requests": 27,
+      "requests_saved": 24,
+      "request_reduction_pct": 47.06,
+      "unbatched_mean_sec": 3.951,
+      "unbatched_p50_sec": 3.949,
+      "batched_mean_sec": 2.144,
+      "batched_p50_sec": 2.143,
+      "latency_reduction_pct": 45.74,
+      "speedup_factor": 1.84
+    },
+    "50_videos": {
+      "num_videos": 50,
+      "unbatched_requests": 101,
+      "batched_requests": 52,
+      "requests_saved": 49,
+      "request_reduction_pct": 48.51,
+      "unbatched_mean_sec": 7.806,
+      "unbatched_p50_sec": 7.799,
+      "batched_mean_sec": 4.114,
+      "batched_p50_sec": 4.108,
+      "latency_reduction_pct": 47.3,
+      "speedup_factor": 1.9
+    }
+  },
+  "summary": [
+    {
+      "num_videos": 10,
+      "unbatched_requests": 21,
+      "batched_requests": 12,
+      "requests_saved": 9,
+      "request_reduction_pct": 42.86,
+      "unbatched_mean_sec": 1.646,
+      "unbatched_p50_sec": 1.629,
+      "batched_mean_sec": 0.949,
+      "batched_p50_sec": 0.947,
+      "latency_reduction_pct": 42.32,
+      "speedup_factor": 1.73
+    },
+    {
+      "num_videos": 25,
+      "unbatched_requests": 51,
+      "batched_requests": 27,
+      "requests_saved": 24,
+      "request_reduction_pct": 47.06,
+      "unbatched_mean_sec": 3.951,
+      "unbatched_p50_sec": 3.949,
+      "batched_mean_sec": 2.144,
+      "batched_p50_sec": 2.143,
+      "latency_reduction_pct": 45.74,
+      "speedup_factor": 1.84
+    },
+    {
+      "num_videos": 50,
+      "unbatched_requests": 101,
+      "batched_requests": 52,
+      "requests_saved": 49,
+      "request_reduction_pct": 48.51,
+      "unbatched_mean_sec": 7.806,
+      "unbatched_p50_sec": 7.799,
+      "batched_mean_sec": 4.114,
+      "batched_p50_sec": 4.108,
+      "latency_reduction_pct": 47.3,
+      "speedup_factor": 1.9
+    }
+  ]
+}

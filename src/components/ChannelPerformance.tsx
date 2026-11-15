@@ -9,6 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(/\/+$/, '') + '/api';
+
 const ChannelPerformance = () => {
     const [channelQuery, setChannelQuery] = useState('');
     const [loading, setLoading] = useState(false);
@@ -26,7 +28,7 @@ const ChannelPerformance = () => {
 
         setLoading(true);
         try {
-            const response = await fetch(`http://localhost:5000/api/channel_performance?channel=${encodeURIComponent(channelQuery)}`);
+            const response = await fetch(`${API_BASE}/channel_performance?channel=${encodeURIComponent(channelQuery)}`);
             const data = await response.json();
 
             if (response.ok) {
@@ -50,7 +52,7 @@ const ChannelPerformance = () => {
 
     const fetchTrendData = async (channelId, period) => {
         try {
-            const response = await fetch(`http://localhost:5000/api/channel_trends?channel_id=${channelId}&period=${period}`);
+            const response = await fetch(`${API_BASE}/channel_trends?channel_id=${channelId}&period=${period}`);
             const data = await response.json();
 
             if (response.ok && data.trends) {
@@ -68,7 +70,7 @@ const ChannelPerformance = () => {
 
     const fetchTopVideos = async (channelId, sortBy) => {
         try {
-            const response = await fetch(`http://localhost:5000/api/top_videos?channel_id=${channelId}&sort_by=${sortBy}&max_results=20`);
+            const response = await fetch(`${API_BASE}/top_videos?channel_id=${channelId}&sort_by=${sortBy}&max_results=20`);
             const data = await response.json();
 
             if (response.ok) {

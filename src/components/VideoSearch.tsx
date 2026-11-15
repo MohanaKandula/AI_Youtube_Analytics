@@ -9,8 +9,10 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import ExportManager from './ExportManager';
 
-const VideoSearch = () => {
-    const [query, setQuery] = useState('');
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(/\/+$/, '') + '/api';
+
+const VideoSearch: React.FC<{ initialQuery?: string }> = ({ initialQuery = '' }) => {
+    const [query, setQuery] = useState(initialQuery);
     const [videos, setVideos] = useState([]);
     const [loading, setLoading] = useState(false);
     const [duration, setDuration] = useState('');
@@ -49,7 +51,7 @@ const VideoSearch = () => {
             if (duration) params.append('duration', duration);
             if (dateFilter) params.append('date', dateFilter);
 
-            const response = await fetch(`http://localhost:5000/api/search_videos?${params}`);
+            const response = await fetch(`${API_BASE}/search_videos?${params}`);
             const data = await response.json();
 
             if (response.ok) {
@@ -71,7 +73,7 @@ const VideoSearch = () => {
 
         try {
             const videoIds = videos.map(v => v.videoId);
-            const response = await fetch('http://localhost:5000/api/refresh_video_metrics', {
+            const response = await fetch(`${API_BASE}/refresh_video_metrics`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ video_ids: videoIds })
@@ -114,7 +116,7 @@ const VideoSearch = () => {
 
     const saveVideo = async (video) => {
         try {
-            const response = await fetch('http://localhost:5000/api/save_item', {
+            const response = await fetch(`${API_BASE}/save_item`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

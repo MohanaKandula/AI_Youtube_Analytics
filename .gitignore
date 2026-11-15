@@ -1,8 +1,37 @@
-node_modules
+# Dependencies
 node_modules/
+.pnpm-store/
+
+# Builds
 dist/
 build/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+
+# Environment & Secrets
 .env
-node_modules
-node_modules
-node_modules
+.env.local
+.env.*.local
+
+# Testing & Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Logs & Temp files
+*.log
+youtube_analytics.log
+uploads/
+exports/
+.DS_Store
+Thumbs.db

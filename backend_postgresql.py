@@ -42,7 +42,7 @@ def get_db_connection():
         host=os.getenv('DB_HOST', 'localhost'),
         database=os.getenv('DB_NAME', 'tutortrace'),
         user=os.getenv('DB_USER', 'postgres'),
-        password=os.getenv('DB_PASSWORD', 'postgres'),
+        password=os.getenv('DB_PASSWORD', ''),
         cursor_factory=RealDictCursor
     )
 

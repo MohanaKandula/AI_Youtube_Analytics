@@ -1,0 +1,76 @@
+{
+  "dataset_provenance": {
+    "source": "Empirical historical educational & tech YouTube video performance distributions",
+    "total_samples": 1200,
+    "features": [
+      "title_length",
+      "description_length",
+      "tag_count",
+      "category_id",
+      "trending_match_score",
+      "avg_competitor_views",
+      "sentiment_score",
+      "engagement_rate_estimate",
+      "similar_video_count"
+    ],
+    "target": "views (30-day performance)"
+  },
+  "evaluation_split": {
+    "train_samples": 960,
+    "test_samples": 240,
+    "split_ratio": "80/20"
+  },
+  "model_benchmarks": {
+    "Baseline: Rule-Based Heuristic (Initial backend)": {
+      "MAE": 50726.36,
+      "MedAE": 36742.0,
+      "RMSE": 69634.23,
+      "R2": -0.6111
+    },
+    "Baseline 1: Dummy (Median)": {
+      "MAE": 40345.35,
+      "MedAE": 32689.5,
+      "RMSE": 55074.26,
+      "R2": -0.0078,
+      "5_Fold_CV_R2_Mean": -0.0236,
+      "5_Fold_CV_R2_Std": 0.0081
+    },
+    "Baseline 2: Dummy (Mean)": {
+      "MAE": 41167.02,
+      "MedAE": 34711.0,
+      "RMSE": 55153.25,
+      "R2": -0.0107,
+      "5_Fold_CV_R2_Mean": -0.002,
+      "5_Fold_CV_R2_Std": 0.0021
+    },
+    "Baseline 3: Linear Regression (OLS)": {
+      "MAE": 12298.89,
+      "MedAE": 10306.35,
+      "RMSE": 15571.46,
+      "R2": 0.9194,
+      "5_Fold_CV_R2_Mean": 0.9362,
+      "5_Fold_CV_R2_Std": 0.0206
+    },
+    "Proposed: Random Forest Regressor": {
+      "MAE": 15125.85,
+      "MedAE": 11808.32,
+      "RMSE": 20062.77,
+      "R2": 0.8663,
+      "5_Fold_CV_R2_Mean": 0.8314,
+      "5_Fold_CV_R2_Std": 0.085
+    },
+    "Proposed: Gradient Boosting (TutorTrace)": {
+      "MAE": 13925.29,
+      "MedAE": 10665.47,
+      "RMSE": 18368.24,
+      "R2": 0.8879,
+      "5_Fold_CV_R2_Mean": 0.8601,
+      "5_Fold_CV_R2_Std": 0.0916
+    }
+  },
+  "key_findings": {
+    "mae_reduction_over_dummy_median_percent": 65.48,
+    "r2_score_achieved": 0.8879,
+    "cv_r2_consistency": 0.8601
+  }
+}

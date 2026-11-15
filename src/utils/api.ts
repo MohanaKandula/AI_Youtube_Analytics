@@ -1,7 +1,7 @@
 // API Configuration and Utilities with JWT
 import { authStorage } from './auth';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(/\/+$/, '');
 
 // API Error Handler
 export class ApiError extends Error {
