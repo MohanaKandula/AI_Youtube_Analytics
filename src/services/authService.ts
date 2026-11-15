@@ -3,7 +3,7 @@ const getApiBase = (): string => {
   if (envUrl) {
     return envUrl.replace(/\/+$/, '');
   }
-  return 'http://localhost:5000';
+  return 'https://ai-youtube-analytics.onrender.com';
 };
 
 export const API_BASE_URL = getApiBase();
