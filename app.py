@@ -607,8 +607,11 @@ class VerifyOTP(Resource):
             if not otp_record:
                 return {"message": "No OTP found for this email"}, 404
             
-            # Check if OTP is expired
-            if datetime.now(timezone.utc) > otp_record['expires_at']:
+            # Check if OTP is expired (handle naive vs aware timestamps)
+            exp = otp_record['expires_at']
+            if exp and exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) > exp:
                 return {"message": "OTP has expired. Please request a new one"}, 400
             
             # Check attempts
@@ -2220,7 +2223,9 @@ class ChannelComparison(Resource):
                     
                     # Parse published date
                     published_date = parse_published_date(snippet.get('publishedAt'))
-                    channel_age_days = (datetime.now(timezone.utc) - published_date).days
+                    if published_date and published_date.tzinfo is None:
+                        published_date = published_date.replace(tzinfo=timezone.utc)
+                    channel_age_days = (datetime.now(timezone.utc) - published_date).days if published_date else 0
                     
                     # Calculate metrics
                     total_views = int(statistics.get('viewCount', 0))
