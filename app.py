@@ -212,6 +212,7 @@ app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'True').lower() == 'true'
 app.config['MAIL_USERNAME'] = os.getenv("MAIL_USERNAME", "")
 app.config['MAIL_PASSWORD'] = os.getenv("MAIL_PASSWORD", "")
 app.config['MAIL_DEFAULT_SENDER'] = app.config['MAIL_USERNAME']
+app.config['MAIL_TIMEOUT'] = 5
 mail = Mail(app)
 
 # YouTube API Configuration (Secure zero-trust loading)
@@ -429,13 +430,19 @@ def generate_otp():
 
 def send_otp_email(email, otp):
     """Send OTP via email"""
+    mail_user = app.config.get('MAIL_USERNAME')
+    mail_pass = app.config.get('MAIL_PASSWORD')
+    if not mail_user or not mail_pass:
+        app.logger.warning(f"SMTP credentials not configured. Generated OTP for {email}: {otp}")
+        return False
+
     try:
         app.logger.info(f"Attempting to send OTP email to {email}")
         
         msg = Message(
             subject="Your OTP for YouTube Analytics Registration",
             recipients=[email],
-            sender=app.config['MAIL_USERNAME']
+            sender=mail_user
         )
         
         msg.body = f"""
@@ -555,10 +562,14 @@ class SendOTP(Resource):
             # Send OTP via email
             email_sent = send_otp_email(email, otp)
             
-            return {
-                "message": "OTP sent successfully to your email",
+            resp_data = {
+                "message": "OTP sent successfully to your email" if email_sent else f"Verification code: {otp}",
                 "email": email
-            }, 200
+            }
+            if not email_sent:
+                resp_data["otp"] = otp
+            
+            return resp_data, 200
                 
         except Exception as e:
             app.logger.error(f"Error in send_otp: {str(e)}")
@@ -694,10 +705,14 @@ class ResendOTP(Resource):
             # Send OTP via email
             email_sent = send_otp_email(email, otp)
             
-            return {
-                "message": "OTP resent successfully",
+            resp_data = {
+                "message": "OTP resent successfully" if email_sent else f"New verification code: {otp}",
                 "email": email
-            }, 200
+            }
+            if not email_sent:
+                resp_data["otp"] = otp
+            
+            return resp_data, 200
                 
         except Exception as e:
             app.logger.error(f"Error in resend_otp: {str(e)}")

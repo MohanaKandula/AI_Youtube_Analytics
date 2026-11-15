@@ -21,6 +21,7 @@ export interface AuthResponse {
   token?: string;
   user?: UserProfile;
   valid?: boolean;
+  otp?: string;
 }
 
 class AuthService {

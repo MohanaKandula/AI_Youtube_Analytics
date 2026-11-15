@@ -45,8 +45,13 @@ export const Register: React.FC<RegisterProps> = ({
     setLoading(true);
     try {
       // Send OTP to email
-      await authService.sendOtp(email, password, fullName);
-      toast.success('Verification OTP sent to your email!');
+      const res = await authService.sendOtp(email, password, fullName);
+      if (res.otp) {
+        setOtp(res.otp);
+        toast.info(`Verification code: ${res.otp}`, { duration: 15000 });
+      } else {
+        toast.success('Verification OTP sent to your email!');
+      }
       setStep('otp');
     } catch (err: any) {
       const msg = err.message || 'Failed to start registration.';
@@ -97,8 +102,13 @@ export const Register: React.FC<RegisterProps> = ({
     setError('');
     setResending(true);
     try {
-      await authService.resendOtp(email);
-      toast.success('New OTP sent to your email.');
+      const res = await authService.resendOtp(email);
+      if (res.otp) {
+        setOtp(res.otp);
+        toast.info(`New verification code: ${res.otp}`, { duration: 15000 });
+      } else {
+        toast.success('New OTP sent to your email.');
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to resend OTP');
       toast.error(err.message || 'Failed to resend OTP');
