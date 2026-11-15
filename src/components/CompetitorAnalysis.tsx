@@ -1,3 +1,4 @@
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://ai-youtube-analytics.onrender.com').replace(/\/+$/, '');
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Loader2, Users, Video, Eye, Plus, X, TrendingUp, Calendar, DollarSign, Target, BarChart3, Activity, Clock, ThumbsUp, MessageCircle, Share2, Award, Download } from 'lucide-react';
@@ -29,7 +30,7 @@ const CompetitorAnalysis = () => {
 
         setSearching(true);
         try {
-            const response = await fetch(`http://127.0.0.1:5000/api/search_channels?query=${encodeURIComponent(channelQuery)}&limit=5`);
+            const response = await fetch(`${API_BASE}/api/search_channels?query=${encodeURIComponent(channelQuery)}&limit=5`);
             const data = await response.json();
             
             if (response.ok && data.channels?.length > 0) {
@@ -74,7 +75,7 @@ const CompetitorAnalysis = () => {
         setLoading(true);
         try {
             const channelIds = selectedChannels.map(c => c.channelId).join(',');
-            const response = await fetch(`http://127.0.0.1:5000/api/competitor_analysis?channel_ids=${channelIds}`);
+            const response = await fetch(`${API_BASE}/api/competitor_analysis?channel_ids=${channelIds}`);
             const data = await response.json();
             
             if (response.ok) {

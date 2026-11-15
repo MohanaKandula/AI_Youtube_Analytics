@@ -1,3 +1,4 @@
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://ai-youtube-analytics.onrender.com').replace(/\/+$/, '');
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Loader2, TrendingUp } from 'lucide-react';
@@ -18,7 +19,7 @@ const KeywordResearch = () => {
 
         setLoading(true);
         try {
-            const response = await fetch(`http://127.0.0.1:5000/api/keyword-research?query=${encodeURIComponent(query)}`);
+            const response = await fetch(`${API_BASE}/api/keyword-research?query=${encodeURIComponent(query)}`);
             const data = await response.json();
             
             if (response.ok) {
